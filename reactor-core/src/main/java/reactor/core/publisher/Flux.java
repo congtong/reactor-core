@@ -1895,6 +1895,90 @@ public abstract class Flux<T> implements CorePublisher<T> {
 		return onAssembly(new FluxRange(start, count));
 	}
 
+	static interface SequenceObserver<T> {
+
+		/**
+		 * Start/{@link Flux#doFirst(Runnable)}. Always invoked by the withObserver operator after constructor.
+		 */
+		void onSubscription();
+
+		/**
+		 * {@link Flux#doFinally(Consumer)} without the {@link SignalType}.
+		 * If interested in type, implement onComplete/onError/onCancel.
+		 */
+		void onTerminateOrCancel();
+
+		void onRequest(long requested);
+
+		void onCancel();
+
+		void onNext(T value);
+
+		void onComplete();
+
+		void onError(Throwable error);
+
+	}
+
+	static abstract class DefaultSequenceObserver<T> implements SequenceObserver<T> {
+
+		/**
+		 * Start/{@link Flux#doFirst(Runnable)}. Always invoked by the withObserver operator after constructor.
+		 */
+		public void onSubscription() {
+
+		}
+
+		/**
+		 * {@link Flux#doFinally(Consumer)} without the {@link SignalType}.
+		 * If interested in type, implement onComplete/onError/onCancel.
+		 */
+		public void onTerminateOrCancel() {
+
+		}
+
+		public void onRequest(long requested) {
+
+		}
+
+		public void onCancel() {
+
+		}
+
+		public void onNext(T value) {
+
+		}
+
+		public void onComplete() {
+
+		}
+
+		public void onError(Throwable error) {
+
+		}
+	}
+
+	public Flux<T> observeWith(Supplier<SequenceObserver<T>> simpleObserverSupplier) {
+		return this.observeWith(System::identityHashCode, (aHashCode, aContextView) -> simpleObserverSupplier.get());
+	}
+
+	public <STATE> Flux<T> observeWith(Supplier<STATE> publisherState, Function<STATE, SequenceObserver<T>> observerFunction) {
+		return this.observeWith(pub -> publisherState.get(), (state, ignore) -> observerFunction.apply(state));
+	}
+
+	public <STATE> Flux<T> observeWith(Supplier<STATE> publisherState, BiFunction<STATE, ContextView, SequenceObserver<T>> observerFunction) {
+		return this.observeWith(pub -> publisherState.get(), observerFunction);
+	}
+
+	public <STATE> Flux<T> observeWith(Function<? super Publisher<T>, STATE> assemblyState, Function<STATE, SequenceObserver<T>> observerFunction) {
+		return this.observeWith(assemblyState, (state, ignore) -> observerFunction.apply(state));
+	}
+
+	public <STATE> Flux<T> observeWith(Function<? super Publisher<T>, STATE> assemblyState,
+									   BiFunction<STATE, ContextView, SequenceObserver<T>> observerFunction) {
+		return onAssembly(new FluxObserveWith(this, assemblyState, observerFunction));
+	}
+
 	/**
 	 * Creates a {@link Flux} that mirrors the most recently emitted {@link Publisher},
 	 * forwarding its data until a new {@link Publisher} comes in the source.
