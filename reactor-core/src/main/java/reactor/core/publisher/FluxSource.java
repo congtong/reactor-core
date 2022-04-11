@@ -39,6 +39,11 @@ final class FluxSource<I> extends Flux<I> implements SourceProducer<I>,
 	@Nullable
 	final OptimizableOperator<?, I> optimizableOperator;
 
+	@Override
+	public boolean isScanAvailable() {
+		return false;
+	}
+
 	/**
 	 * Build a {@link FluxSource} wrapper around the passed parent {@link Publisher}
 	 *

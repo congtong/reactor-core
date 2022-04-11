@@ -1900,23 +1900,23 @@ public abstract class Flux<T> implements CorePublisher<T> {
 		/**
 		 * Start/{@link Flux#doFirst(Runnable)}. Always invoked by the withObserver operator after constructor.
 		 */
-		void onSubscription();
+		void onSubscription() throws Throwable;
 
 		/**
 		 * {@link Flux#doFinally(Consumer)} without the {@link SignalType}.
 		 * If interested in type, implement onComplete/onError/onCancel.
 		 */
-		void onTerminateOrCancel();
+		void onTerminateOrCancel() throws Throwable;
 
-		void onRequest(long requested);
+		void onRequest(long requested) throws Throwable;
 
-		void onCancel();
+		void onCancel() throws Throwable;
 
-		void onNext(T value);
+		void onNext(T value) throws Throwable;
 
-		void onComplete();
+		void onComplete() throws Throwable;
 
-		void onError(Throwable error);
+		void onError(Throwable error) throws Throwable;
 
 	}
 
@@ -1925,7 +1925,7 @@ public abstract class Flux<T> implements CorePublisher<T> {
 		/**
 		 * Start/{@link Flux#doFirst(Runnable)}. Always invoked by the withObserver operator after constructor.
 		 */
-		public void onSubscription() {
+		public void onSubscription() throws Throwable  {
 
 		}
 
@@ -1933,27 +1933,27 @@ public abstract class Flux<T> implements CorePublisher<T> {
 		 * {@link Flux#doFinally(Consumer)} without the {@link SignalType}.
 		 * If interested in type, implement onComplete/onError/onCancel.
 		 */
-		public void onTerminateOrCancel() {
+		public void onTerminateOrCancel() throws Throwable  {
 
 		}
 
-		public void onRequest(long requested) {
+		public void onRequest(long requested) throws Throwable  {
 
 		}
 
-		public void onCancel() {
+		public void onCancel() throws Throwable  {
 
 		}
 
-		public void onNext(T value) {
+		public void onNext(T value) throws Throwable  {
 
 		}
 
-		public void onComplete() {
+		public void onComplete() throws Throwable {
 
 		}
 
-		public void onError(Throwable error) {
+		public void onError(Throwable error) throws Throwable  {
 
 		}
 	}
@@ -1962,13 +1962,15 @@ public abstract class Flux<T> implements CorePublisher<T> {
 		return this.observeWith(System::identityHashCode, (aHashCode, aContextView) -> simpleObserverSupplier.get());
 	}
 
-	public <STATE> Flux<T> observeWith(Supplier<STATE> publisherState, Function<STATE, SequenceObserver<T>> observerFunction) {
-		return this.observeWith(pub -> publisherState.get(), (state, ignore) -> observerFunction.apply(state));
+	public Flux<T> observeWith(Function<Scannable, SequenceObserver<T>> observerFunction) {
+		return this.observeWith(Scannable::from, observerFunction);
 	}
 
-	public <STATE> Flux<T> observeWith(Supplier<STATE> publisherState, BiFunction<STATE, ContextView, SequenceObserver<T>> observerFunction) {
-		return this.observeWith(pub -> publisherState.get(), observerFunction);
+
+	public Flux<T> observeWith(BiFunction<Scannable, ContextView, SequenceObserver<T>> observerFunction) {
+		return this.observeWith(Scannable::from, observerFunction);
 	}
+
 
 	public <STATE> Flux<T> observeWith(Function<? super Publisher<T>, STATE> assemblyState, Function<STATE, SequenceObserver<T>> observerFunction) {
 		return this.observeWith(assemblyState, (state, ignore) -> observerFunction.apply(state));

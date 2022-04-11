@@ -17,23 +17,23 @@
 package reactor.core.publisher;
 
 
-import org.junit.jupiter.api.Tags;
 import org.junit.jupiter.api.Test;
 import org.reactivestreams.Publisher;
+import org.reactivestreams.Subscriber;
 
 import reactor.core.CorePublisher;
 import reactor.core.Scannable;
+import reactor.util.Logger;
+import reactor.util.Loggers;
+import reactor.util.annotation.Nullable;
 import reactor.util.context.Context;
-import reactor.util.function.Tuple2;
+import reactor.util.context.ContextView;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
-import java.util.LinkedList;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.BiFunction;
 import java.util.logging.Level;
-import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -41,38 +41,39 @@ public class FluxLogTest {
 
 	private static final class MetricState {
 
-		public static MetricState fromAssembly(Publisher<?> assembled, List<String> collectedMetrics) {
+		private static final Logger LOGGER = Loggers.getLogger(MetricState.class);
+
+		public static MetricState of(Scannable parent, List<String> collectedMetrics, @Nullable String publisherType) {
+			
+			if (!parent.isScanAvailable()) {
+				LOGGER.warn("Attempting to activate metrics but the upstream is not Scannable. You might want to use `name()` (and optionally `tags()`) right before this MetricState");
+				return new MetricState("reactor", Collections.singletonList("type-"+publisherType), collectedMetrics);
+			}
 			String name;
 			List<String> tags = new ArrayList<>();
-			Scannable scannable = Scannable.from(assembled);
-			if (scannable.isScanAvailable()) {
-				String nameOrDefault = scannable.name();
-				if (scannable.stepName()
-					.equals(nameOrDefault)) {
-					name = "reactor";
-				}
-				else {
-					name = nameOrDefault;
-				}
-				scannable.tags().forEach(t -> tags.add(t.getT1() + "-" + t.getT2()));
-			}
-			else {
+			String nameOrDefault = parent.name();
+			if (parent.stepName()
+				.equals(nameOrDefault)) {
 				name = "reactor";
 			}
+			else {
+				name = nameOrDefault;
+			}
+			parent.tags().forEach(t -> tags.add(t.getT1() + "-" + t.getT2()));
 
-			if (assembled instanceof GroupedFlux) {
+			if (parent instanceof GroupedFlux) {
 				tags.add("type-GroupedFlux");
 			}
-			else if (assembled instanceof Flux) {
+			else if (parent instanceof Flux) {
 				tags.add("type-Flux");
 			}
-			else if (assembled instanceof Mono) {
+			else if (parent instanceof Mono) {
 				tags.add("type-Mono");
 			}
-			else if (assembled instanceof ParallelFlux) {
+			else if (parent instanceof ParallelFlux) {
 				tags.add("type-ParallelFlux");
 			}
-			else if (assembled instanceof CorePublisher) {
+			else if (parent instanceof CorePublisher) {
 				tags.add("type-otherCorePublisher");
 			}
 			else {
@@ -97,38 +98,44 @@ public class FluxLogTest {
 
 	private static final class MetricSequenceObserver<T> extends Flux.DefaultSequenceObserver<T> {
 
-		private final MetricState globalMetricState;
-		private final String id;
+		private final MetricState metricState;
+		private final String      id;
 
-		public MetricSequenceObserver(MetricState globalMetricState, String id) {
-			this.globalMetricState = globalMetricState;
+		public MetricSequenceObserver(MetricState state, String id) {
+			this.metricState = state;
 			this.id = id;
 		}
 
 		@Override
 		public void onSubscription() {
-			globalMetricState.collectedMetrics.add("this is the beginning of " + globalMetricState.name + " with id " + id);
+			metricState.collectedMetrics.add("this is the beginning of " + metricState.name + " with id " + id);
 		}
 
 		@Override
 		public void onNext(T value) {
-			globalMetricState.collectedMetrics.add(id + " => onNext of " + value);
+			metricState.collectedMetrics.add(id + " => onNext of " + value);
 		}
 
 		@Override
-		public void onComplete() {
-			globalMetricState.collectedMetrics.add(id + " => onComplete");
+		public void onComplete() throws Throwable {
+			Thread.sleep(100);
+			metricState.collectedMetrics.add(id + " => onComplete");
 		}
 
 		@Override
 		public void onError(Throwable throwable) {
-			globalMetricState.collectedMetrics.add(id + " => onError of " + throwable);
+			metricState.collectedMetrics.add(id + " => onError of " + throwable);
 		}
 
 		@Override
 		public void onTerminateOrCancel() {
-			globalMetricState.collectedMetrics.add("this is the end of " + globalMetricState.name + " with id " + id);
+			metricState.collectedMetrics.add("this is the end of " + metricState.name + " with id " + id);
 		}
+	}
+
+	static <T> BiFunction<Scannable, ContextView, Flux.SequenceObserver<T>> fluxMetrics(List<String> registry) {
+		return ((scannable, contextView) -> new MetricSequenceObserver<>(MetricState.of(scannable, registry, "flux"),
+			contextView.getOrDefault("requestId", "noRequestId")));
 	}
 
 	@Test
@@ -142,9 +149,13 @@ public class FluxLogTest {
 
 		source
 			.name("NAME")
-			.observeWith()
-			.observeWith(p -> MetricState.fromAssembly(p, collectedMetrics), (state, contextView) ->
-			new MetricSequenceObserver<>(state, contextView.getOrDefault("requestId", "noRequestId")))
+			.transform(f -> new Publisher<Integer>() {
+				@Override
+				public void subscribe(Subscriber<? super Integer> s) {
+					f.subscribe(Operators.toCoreSubscriber(s));
+				}
+			})
+			.observeWith(fluxMetrics(collectedMetrics))
 			.contextWrite(Context.of("requestId", "123"))
 			.blockLast();
 

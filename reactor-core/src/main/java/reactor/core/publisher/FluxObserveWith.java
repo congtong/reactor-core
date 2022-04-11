@@ -70,7 +70,15 @@ final class FluxObserveWith<T, STATE> extends InternalFluxOperator<T, T> {
 		public void onSubscribe(Subscription s) {
 			if (Operators.validate(this.s, s)) {
 				this.s = s;
-				observer.onSubscription();
+
+				try {
+					observer.onSubscription();
+				}
+				catch (Throwable observerError) {
+					s.cancel();
+					Operators.error(actual, observerError);
+					return;
+				}
 				actual.onSubscribe(s);
 			}
 		}
