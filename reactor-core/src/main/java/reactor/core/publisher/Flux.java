@@ -57,10 +57,11 @@ import reactor.core.Disposable;
 import reactor.core.Exceptions;
 import reactor.core.Fuseable;
 import reactor.core.Scannable;
+import reactor.core.publisher.FluxOnAssembly.AssemblySnapshot;
 import reactor.core.publisher.FluxOnAssembly.CheckpointHeavySnapshot;
 import reactor.core.publisher.FluxOnAssembly.CheckpointLightSnapshot;
-import reactor.core.publisher.FluxOnAssembly.AssemblySnapshot;
 import reactor.core.publisher.FluxSink.OverflowStrategy;
+import reactor.core.publisher.MetricsSequenceListener.MetricsCompanion;
 import reactor.core.scheduler.Scheduler;
 import reactor.core.scheduler.Scheduler.Worker;
 import reactor.core.scheduler.Schedulers;
@@ -1893,82 +1894,6 @@ public abstract class Flux<T> implements CorePublisher<T> {
 			return empty();
 		}
 		return onAssembly(new FluxRange(start, count));
-	}
-
-	static interface SequenceObserver<T> {
-
-		/**
-		 * Start/{@link Flux#doFirst(Runnable)}. Always invoked by the withObserver operator after constructor.
-		 */
-		void onSubscription() throws Throwable;
-
-		/**
-		 * {@link Flux#doFinally(Consumer)} without the {@link SignalType}.
-		 * If interested in type, implement onComplete/onError/onCancel.
-		 */
-		void onTerminateOrCancel() throws Throwable;
-
-		void onRequest(long requested) throws Throwable;
-
-		void onCancel() throws Throwable;
-
-		void onNext(T value) throws Throwable;
-
-		void onComplete() throws Throwable;
-
-		void onError(Throwable error) throws Throwable;
-
-	}
-
-	static abstract class DefaultSequenceObserver<T> implements SequenceObserver<T> {
-
-		/**
-		 * Start/{@link Flux#doFirst(Runnable)}. Always invoked by the withObserver operator after constructor.
-		 */
-		public void onSubscription() throws Throwable  {
-
-		}
-
-		/**
-		 * {@link Flux#doFinally(Consumer)} without the {@link SignalType}.
-		 * If interested in type, implement onComplete/onError/onCancel.
-		 */
-		public void onTerminateOrCancel() throws Throwable  {
-
-		}
-
-		public void onRequest(long requested) throws Throwable  {
-
-		}
-
-		public void onCancel() throws Throwable  {
-
-		}
-
-		public void onNext(T value) throws Throwable  {
-
-		}
-
-		public void onComplete() throws Throwable {
-
-		}
-
-		public void onError(Throwable error) throws Throwable  {
-
-		}
-	}
-
-	public Flux<T> observeWith(Supplier<SequenceObserver<T>> simpleObserverSupplier) {
-		return this.observeWith(System::identityHashCode, (aHashCode, aContextView) -> simpleObserverSupplier.get());
-	}
-
-	public Flux<T> observeWith(BiFunction<Scannable, ContextView, SequenceObserver<T>> observerFunction) {
-		return this.observeWith(Scannable::from, observerFunction);
-	}
-
-	public <STATE> Flux<T> observeWith(Function<? super Publisher<T>, STATE> assemblyState,
-									   BiFunction<STATE, ContextView, SequenceObserver<T>> observerFunction) {
-		return onAssembly(new FluxObserveWith(this, assemblyState, observerFunction));
 	}
 
 	/**
@@ -6172,6 +6097,56 @@ public abstract class Flux<T> implements CorePublisher<T> {
 	}
 
 	/**
+	 * Listen to signals emitted or received by this {@link Flux} with a stateful per-{@link Subscriber}
+	 * {@link SequenceListener}.
+	 * <p>
+	 * This simplified variant assumes the state is purely per subscription, as the {@link Supplier}
+	 * is called for each incoming {@link Subscriber} without additional context.
+	 *
+	 * @param simpleListenerSupplier the {@link Supplier} to create a new {@link SequenceListener} on each subscription
+	 * @return a new {@link Flux} with side effects defined by generated {@link SequenceListener}
+	 * @see #listen(BiFunction)
+	 * @see #listen(Object, BiFunction)
+	 */
+	public Flux<T> listen(Supplier<SequenceListener<T>> simpleListenerSupplier) {
+		return this.listen(System.identityHashCode(this), (aHashCode, aContextView) -> simpleListenerSupplier.get());
+	}
+
+	/**
+	 * Listen to signals emitted or received by this {@link Flux} with a stateful per-{@link Subscriber}
+	 * {@link SequenceListener}.
+	 * <p>
+	 * This intermediate variant allows the {@link SequenceListener} to be constructed for each subscription with access
+	 * to a {@link Scannable} of this {@link Mono} as well as the incoming {@link Subscriber}'s {@link ContextView}.
+	 *
+	 * @param listenerGenerator the {@link BiFunction} to create a new {@link SequenceListener} on each subscription
+	 * @return a new {@link Flux} with side effects defined by generated {@link SequenceListener}
+	 * @see #listen(Supplier)
+	 * @see #listen(Object, BiFunction)
+	 */
+	public Flux<T> listen(BiFunction<Scannable, ContextView, SequenceListener<T>> listenerGenerator) {
+		return this.listen(Scannable.from(this), listenerGenerator);
+	}
+
+	/**
+	 * Listen to signals emitted or received by this {@link Flux} with a stateful per-{@link Subscriber}
+	 * {@link SequenceListener}.
+	 * <p>
+	 * This advanced variant allows some {@link Publisher}-level {@code STATE} to be constructed at assembly time
+	 * and passed as the first parameter. Then the {@link SequenceListener} can be constructed for each subscription
+	 * with access to both this common assembly state and the incoming {@link Subscriber}'s {@link ContextView}.
+	 *
+	 * @param listenerGenerator the {@link BiFunction} to create a new {@link SequenceListener} on each subscription
+	 * @return a new {@link Flux} with side effects defined by generated {@link SequenceListener}
+	 * @see #listen(Supplier)
+	 * @see #listen(Object, BiFunction)
+	 */
+	public <STATE> Flux<T> listen(STATE assemblyState, BiFunction<STATE, ContextView, SequenceListener<T>> listenerGenerator) {
+		//TODO also support a Fuseable version
+		return onAssembly(new FluxListen<>(this, assemblyState, listenerGenerator));
+	}
+
+	/**
 	 * Observe all Reactive Streams signals and trace them using {@link Logger} support.
 	 * Default will use {@link Level#INFO} and {@code java.util.logging}.
 	 * If SLF4J is available, it will be used instead.
@@ -6507,10 +6482,7 @@ public abstract class Flux<T> implements CorePublisher<T> {
 			return this;
 		}
 
-		if (this instanceof Fuseable) {
-			return onAssembly(new FluxMetricsFuseable<>(this));
-		}
-		return onAssembly(new FluxMetrics<>(this));
+		return listen(MetricsCompanion.fromFlux(this), MetricsSequenceListener::new);
 	}
 
 	/**
