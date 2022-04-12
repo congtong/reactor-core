@@ -1962,18 +1962,8 @@ public abstract class Flux<T> implements CorePublisher<T> {
 		return this.observeWith(System::identityHashCode, (aHashCode, aContextView) -> simpleObserverSupplier.get());
 	}
 
-	public Flux<T> observeWith(Function<Scannable, SequenceObserver<T>> observerFunction) {
-		return this.observeWith(Scannable::from, observerFunction);
-	}
-
-
 	public Flux<T> observeWith(BiFunction<Scannable, ContextView, SequenceObserver<T>> observerFunction) {
 		return this.observeWith(Scannable::from, observerFunction);
-	}
-
-
-	public <STATE> Flux<T> observeWith(Function<? super Publisher<T>, STATE> assemblyState, Function<STATE, SequenceObserver<T>> observerFunction) {
-		return this.observeWith(assemblyState, (state, ignore) -> observerFunction.apply(state));
 	}
 
 	public <STATE> Flux<T> observeWith(Function<? super Publisher<T>, STATE> assemblyState,
