@@ -47,6 +47,8 @@ import static reactor.test.publisher.TestPublisher.Violation.CLEANUP_ON_TERMINAT
 
 public class MonoMetricsTest {
 
+	//FIXME use Mono.metrics() / MonoListen everywhere
+
 	private MeterRegistry registry;
 	private MeterRegistry previousRegistry;
 

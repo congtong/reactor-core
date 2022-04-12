@@ -147,7 +147,7 @@ final class MetricsSequenceListener<T> implements SequenceListener<T> {
 	long         lastNextEventNanos = -1L;
 	boolean      valued;
 
-	MetricsSequenceListener(MetricsCompanion companion, ContextView ignored) {
+	MetricsSequenceListener(MetricsCompanion companion) {
 		this.companion = companion;
 
 		this.valued = false;

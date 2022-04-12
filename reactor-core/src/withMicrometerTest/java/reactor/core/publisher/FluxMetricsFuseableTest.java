@@ -48,6 +48,8 @@ import static reactor.core.publisher.FluxMetrics.TAG_ON_COMPLETE_EMPTY;
 
 public class FluxMetricsFuseableTest {
 
+	//FIXME use Mono.metrics() / MonoListen everywhere
+
 	private MeterRegistry registry;
 	private MeterRegistry previousRegistry;
 	private MockClock clock;

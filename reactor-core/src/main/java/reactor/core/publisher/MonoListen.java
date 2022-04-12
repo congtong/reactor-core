@@ -16,7 +16,7 @@
 
 package reactor.core.publisher;
 
-import java.util.function.BiFunction;
+import java.util.function.Function;
 
 import reactor.core.CoreSubscriber;
 import reactor.core.publisher.FluxListen.SequenceObserverSubscriber;
@@ -27,15 +27,13 @@ import reactor.util.context.ContextView;
  *
  * @author Simon Baslé
  */
-public class MonoListen<T, STATE> extends InternalMonoOperator<T, T> {
+public class MonoListen<T> extends InternalMonoOperator<T, T> {
 
-	final BiFunction<STATE, ContextView, SequenceListener<T>> observerGenerator;
-	final STATE                                               state;
+	final Function<ContextView, SequenceListener<T>> observerGenerator;
 
-	MonoListen(Mono<? extends T> source, STATE state, BiFunction<STATE, ContextView, SequenceListener<T>> observerGenerator) {
+	MonoListen(Mono<? extends T> source, Function<ContextView, SequenceListener<T>> observerGenerator) {
 		super(source);
 		this.observerGenerator = observerGenerator;
-		this.state = state;
 	}
 
 	@Override
@@ -46,7 +44,7 @@ public class MonoListen<T, STATE> extends InternalMonoOperator<T, T> {
 		SequenceListener<T> sequenceListener;
 		try {
 			//TODO replace currentContext() with contextView() when available
-			sequenceListener = observerGenerator.apply(this.state, actual.currentContext().readOnly());
+			sequenceListener = observerGenerator.apply(actual.currentContext().readOnly());
 		}
 		catch (Throwable generatorError) {
 			Operators.error(actual, generatorError);

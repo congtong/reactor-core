@@ -16,7 +16,7 @@
 
 package reactor.core.publisher;
 
-import java.util.function.BiFunction;
+import java.util.function.Function;
 
 import org.reactivestreams.Subscription;
 
@@ -30,15 +30,13 @@ import reactor.util.context.ContextView;
  *
  * @author Simon Baslé
  */
-final class FluxListen<T, STATE> extends InternalFluxOperator<T, T> {
+final class FluxListen<T> extends InternalFluxOperator<T, T> {
 
-	final BiFunction<STATE, ContextView, SequenceListener<T>> observerGenerator;
-	final STATE                                               state;
+	final Function<ContextView, SequenceListener<T>> observerGenerator;
 
-	FluxListen(Flux<? extends T> source, STATE state, BiFunction<STATE, ContextView, SequenceListener<T>> observerGenerator) {
+	FluxListen(Flux<? extends T> source, Function<ContextView, SequenceListener<T>> observerGenerator) {
 		super(source);
 		this.observerGenerator = observerGenerator;
-		this.state = state;
 	}
 
 	@Override
@@ -49,7 +47,7 @@ final class FluxListen<T, STATE> extends InternalFluxOperator<T, T> {
 		SequenceListener<T> sequenceListener;
 		try {
 			//TODO replace currentContext() with contextView() when available
-			sequenceListener = observerGenerator.apply(this.state, actual.currentContext().readOnly());
+			sequenceListener = observerGenerator.apply(actual.currentContext().readOnly());
 		}
 		catch (Throwable generatorError) {
 			Operators.error(actual, generatorError);

@@ -6100,50 +6100,35 @@ public abstract class Flux<T> implements CorePublisher<T> {
 	 * Listen to signals emitted or received by this {@link Flux} with a stateful per-{@link Subscriber}
 	 * {@link SequenceListener}.
 	 * <p>
-	 * This simplified variant assumes the state is purely per subscription, as the {@link Supplier}
-	 * is called for each incoming {@link Subscriber} without additional context.
+	 * This simplified variant assumes the state is purely initialized in the {@link Supplier},
+	 * as it is called for each incoming {@link Subscriber} without additional context.
 	 *
 	 * @param simpleListenerSupplier the {@link Supplier} to create a new {@link SequenceListener} on each subscription
 	 * @return a new {@link Flux} with side effects defined by generated {@link SequenceListener}
-	 * @see #listen(BiFunction)
-	 * @see #listen(Object, BiFunction)
+	 * @see #listen(Function)
 	 */
 	public Flux<T> listen(Supplier<SequenceListener<T>> simpleListenerSupplier) {
-		return this.listen(System.identityHashCode(this), (aHashCode, aContextView) -> simpleListenerSupplier.get());
+		return this.listen(aContextView -> simpleListenerSupplier.get());
 	}
 
 	/**
 	 * Listen to signals emitted or received by this {@link Flux} with a stateful per-{@link Subscriber}
 	 * {@link SequenceListener}.
 	 * <p>
-	 * This intermediate variant allows the {@link SequenceListener} to be constructed for each subscription with access
-	 * to a {@link Scannable} of this {@link Mono} as well as the incoming {@link Subscriber}'s {@link ContextView}.
-	 *
-	 * @param listenerGenerator the {@link BiFunction} to create a new {@link SequenceListener} on each subscription
-	 * @return a new {@link Flux} with side effects defined by generated {@link SequenceListener}
-	 * @see #listen(Supplier)
-	 * @see #listen(Object, BiFunction)
-	 */
-	public Flux<T> listen(BiFunction<Scannable, ContextView, SequenceListener<T>> listenerGenerator) {
-		return this.listen(Scannable.from(this), listenerGenerator);
-	}
-
-	/**
-	 * Listen to signals emitted or received by this {@link Flux} with a stateful per-{@link Subscriber}
-	 * {@link SequenceListener}.
+	 * This variant allows the {@link SequenceListener} to be constructed for each subscription
+	 * with access to the incoming {@link Subscriber}'s {@link ContextView}.
 	 * <p>
-	 * This advanced variant allows some {@link Publisher}-level {@code STATE} to be constructed at assembly time
-	 * and passed as the first parameter. Then the {@link SequenceListener} can be constructed for each subscription
-	 * with access to both this common assembly state and the incoming {@link Subscriber}'s {@link ContextView}.
+	 * In addition, note that it should be possible to manually capture assembly-time state and
+	 * use it in the {@link Function} when applying this operator. This is the approach used by
+	 * the {@link #metrics()} operator to scan name and tags, for example.
 	 *
-	 * @param listenerGenerator the {@link BiFunction} to create a new {@link SequenceListener} on each subscription
+	 * @param listenerGenerator the {@link Function} to create a new {@link SequenceListener} on each subscription
 	 * @return a new {@link Flux} with side effects defined by generated {@link SequenceListener}
 	 * @see #listen(Supplier)
-	 * @see #listen(Object, BiFunction)
 	 */
-	public <STATE> Flux<T> listen(STATE assemblyState, BiFunction<STATE, ContextView, SequenceListener<T>> listenerGenerator) {
+	public Flux<T> listen(Function<ContextView, SequenceListener<T>> listenerGenerator) {
 		//TODO also support a Fuseable version
-		return onAssembly(new FluxListen<>(this, assemblyState, listenerGenerator));
+		return onAssembly(new FluxListen<>(this, listenerGenerator));
 	}
 
 	/**
@@ -6482,7 +6467,8 @@ public abstract class Flux<T> implements CorePublisher<T> {
 			return this;
 		}
 
-		return listen(MetricsCompanion.fromFlux(this), MetricsSequenceListener::new);
+		final MetricsCompanion commonState = MetricsCompanion.fromFlux(this);
+		return listen(ctx -> new MetricsSequenceListener<>(commonState));
 	}
 
 	/**
