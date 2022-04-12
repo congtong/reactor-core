@@ -143,18 +143,9 @@ public class FluxLogTest {
 		Flux<Integer> source = Flux.range(1, 5);
 
 		List<String> collectedMetrics = new ArrayList<>();
-//		source.observeWith(MetricSequenceObserver::new);
-//		source.observeWith(MetricState::fromAssembly, (state, contextView) ->
-//			new MetricSequenceObserver<>(state, contextView.getOrDefault("requestId", "noRequestId")));
 
 		source
 			.name("NAME")
-			.transform(f -> new Publisher<Integer>() {
-				@Override
-				public void subscribe(Subscriber<? super Integer> s) {
-					f.subscribe(Operators.toCoreSubscriber(s));
-				}
-			})
 			.observeWith(fluxMetrics(collectedMetrics))
 			.contextWrite(Context.of("requestId", "123"))
 			.blockLast();
